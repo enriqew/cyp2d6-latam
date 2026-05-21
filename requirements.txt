@@ -1,0 +1,27 @@
+# CYP2D6 star allele pipeline dependencies
+
+# ── Core caller ───────────────────────────────────────────────────────────────
+aldy>=3.3             # CYP2D6 SNP+CNV star allele caller (pip install aldy)
+# samtools             # System dependency — NOT pip. Install via:
+#                      #   Ubuntu/Debian: apt install samtools
+#                      #   macOS:         brew install samtools
+#                      #   Conda:         conda install -c bioconda samtools
+#                      # Required: samtools >= 1.16 with HTTPS/curl support
+
+# ── Data processing ───────────────────────────────────────────────────────────
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14.0         # Parquet support for pandas
+
+# ── Analytical SQL ────────────────────────────────────────────────────────────
+duckdb>=0.10          # In-process SQL engine for Gold aggregations
+
+# ── dbt (optional, for models/ layer) ────────────────────────────────────────
+dbt-core>=1.7
+dbt-duckdb>=1.7       # DuckDB adapter for dbt
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=7.0
+
+# ── Development ───────────────────────────────────────────────────────────────
+flake8>=6.0

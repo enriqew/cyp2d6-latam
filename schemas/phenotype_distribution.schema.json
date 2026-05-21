@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CYP2D6 Phenotype Distribution",
+  "description": "CPIC phenotype breakdown (UM/NM/IM/PM) by population.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["phenotype", "population", "percentage", "n_samples", "n_total"],
+    "properties": {
+      "phenotype": {
+        "type": "string",
+        "enum": ["UM", "NM", "IM", "PM"],
+        "description": "CPIC metabolizer phenotype abbreviation"
+      },
+      "population": {
+        "type": "string",
+        "enum": ["MXL", "PEL", "CLM", "PUR", "CEU"],
+        "description": "1000 Genomes population code"
+      },
+      "percentage": {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 100.0,
+        "description": "Percentage of individuals with this phenotype in the population"
+      },
+      "n_samples": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of individuals with this phenotype"
+      },
+      "n_total": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Total individuals in the population"
+      }
+    },
+    "additionalProperties": false
+  }
+}

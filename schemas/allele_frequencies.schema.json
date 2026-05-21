@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CYP2D6 Allele Frequencies",
+  "description": "Per-allele frequency by population. One record per (allele, population) pair.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["allele", "population", "frequency", "n_carriers", "n_total"],
+    "properties": {
+      "allele": {
+        "type": "string",
+        "description": "CYP2D6 star allele (e.g. '*1', '*4', '*5', '*1x2')",
+        "examples": ["*1", "*4", "*5", "*10", "*17", "*41", "*1x2"]
+      },
+      "population": {
+        "type": "string",
+        "enum": ["MXL", "PEL", "CLM", "PUR", "CEU"],
+        "description": "1000 Genomes superpopulation code"
+      },
+      "frequency": {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "description": "Allele frequency (count / 2*n_samples)"
+      },
+      "n_carriers": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of individuals carrying at least one copy of this allele"
+      },
+      "n_total": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Total number of individuals in this population"
+      }
+    },
+    "additionalProperties": false
+  }
+}
