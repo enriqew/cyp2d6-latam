@@ -33,6 +33,7 @@ import logging
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -195,19 +196,31 @@ def _error_result(sample_id: str, msg: str) -> Dict[str, Any]:
 
 # ── Batch mode ────────────────────────────────────────────────────────────────
 
-def run_all_samples() -> List[Dict[str, Any]]:
-    """Run Aldy on all BAM slices found in BAM_DIR."""
+def run_all_samples(workers: int = 6) -> List[Dict[str, Any]]:
+    """
+    Run Aldy on all BAM slices found in BAM_DIR in parallel.
+
+    Each Aldy call spawns its own subprocess, so ThreadPoolExecutor gives
+    real parallelism despite the GIL. Default 6 workers ≈ 6x speedup vs
+    sequential.
+    """
     bam_files = sorted(BAM_DIR.glob("*.bam"))
     if not bam_files:
         log.warning("No BAM files found in %s", BAM_DIR)
         return []
 
-    log.info("Found %d BAM files to process", len(bam_files))
-    results = []
-    for bam in bam_files:
-        sample_id = bam.stem
-        res = run_aldy_for_sample(sample_id)
-        results.append(res)
+    log.info("Found %d BAM files — running Aldy with %d workers", len(bam_files), workers)
+    results: List[Dict[str, Any]] = []
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(run_aldy_for_sample, bam.stem): bam for bam in bam_files}
+        for future in as_completed(futures):
+            try:
+                res = future.result()
+            except Exception as exc:
+                bam = futures[future]
+                res = _error_result(bam.stem, str(exc))
+            results.append(res)
 
     ok = sum(1 for r in results if r["status"] == "ok")
     errors = sum(1 for r in results if r["status"] == "error")
@@ -223,6 +236,8 @@ def _parse_args() -> argparse.Namespace:
     group.add_argument("--sample", metavar="SAMPLE_ID", help="Process a single sample")
     group.add_argument("--all", action="store_true", default=True,
                        help="Process all BAM slices in data/bam_slices/ (default)")
+    parser.add_argument("--workers", type=int, default=6,
+                        help="Parallel Aldy processes for batch mode (default: 6)")
     return parser.parse_args()
 
 
@@ -233,4 +248,4 @@ if __name__ == "__main__":
         import json
         print(json.dumps(result, indent=2))
     else:
-        run_all_samples()
+        run_all_samples(workers=args.workers)
