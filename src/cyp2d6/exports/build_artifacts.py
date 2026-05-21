@@ -100,10 +100,10 @@ def build_metadata_json(
         "gene": "CYP2D6",
         "pipeline_version": "1.0.0",
         "run_date": date.today().isoformat(),
-        "reference_genome": "GRCh38/hg38",
-        "caller": "Aldy v3+",
+        "reference_genome": "GRCh37/hg19",
+        "caller": "Aldy v4.8.3",
         "source": "1000 Genomes Phase 3 — low-coverage WGS BAM slices",
-        "region_sliced": "chr22:42,000,000–42,200,000",
+        "region_sliced": "22:42,400,000–42,650,000",
         "populations": {
             "MXL": {"label": "Mexican Ancestry (Los Angeles)", "n": pop_counts.get("MXL", 0)},
             "PEL": {"label": "Peruvians (Lima)", "n": pop_counts.get("PEL", 0)},
@@ -116,9 +116,9 @@ def build_metadata_json(
         "phenotype_categories": ["UM", "NM", "IM", "PM"],
         "limitations": [
             "Low-coverage WGS (~4x) — Aldy CNV detection less reliable below 10x",
-            "Small sample sizes per population (n=64–104)",
-            "Only 5 sample IDs per population included in manifest demo mode",
+            "16/452 samples excluded: average coverage below Aldy threshold",
             "Ultrarapid duplication counts depend on read depth at gene boundaries",
+            "Indeterminate calls reflect novel/complex alleles not yet in CPIC — common in admixed LATAM populations",
         ],
     }
 

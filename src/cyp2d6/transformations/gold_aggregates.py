@@ -221,6 +221,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     df_silver = apply_silver_phenotypes(df_raw)
+    df_silver = df_silver[df_silver["population"] != "UNKNOWN"]
 
     df_allele_freq = build_allele_frequencies(df_silver)
     df_pheno_dist = build_phenotype_distribution(df_silver)

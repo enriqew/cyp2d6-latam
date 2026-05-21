@@ -22,11 +22,15 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from pathlib import Path
 from typing import List, Dict, Any
 
 import pandas as pd
 
+_INGEST_DIR = Path(__file__).parents[3] / "ingest"
+if str(_INGEST_DIR) not in sys.path:
+    sys.path.insert(0, str(_INGEST_DIR))
 from sample_manifest import POPULATION_SAMPLES
 
 log = logging.getLogger(__name__)

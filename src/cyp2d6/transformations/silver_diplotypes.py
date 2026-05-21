@@ -63,13 +63,17 @@ ALLELE_ACTIVITY_SCORES: Dict[str, float] = {
     "*9":  0.5,
     "*10": 0.25,
     "*11": 0.0,
+    "*13": 0.0,   # nonfunctional gene conversion with CYP2D7
     "*14": 0.5,
     "*17": 0.5,
     "*29": 0.5,
+    "*35": 1.0,   # uncertain/normal function (CPIC 2022)
+    "*36": 0.0,   # nonfunctional
+    "*39": 1.0,   # normal function (PharmVar)
     "*41": 0.5,
 }
 
-# Regex for ultrarapid duplications: *1x2, *2x3, *1xN, etc.
+# Regex for xN duplications: *1x2, *2x3 (less common — Aldy v4 uses + notation instead)
 _DUPLICATION_RE = re.compile(r"^(\*\d+)x(\d+)$", re.IGNORECASE)
 
 
@@ -92,7 +96,7 @@ def activity_score_for_allele(allele: str) -> float:
     """
     allele = allele.strip()
 
-    # Handle xN duplications
+    # Handle xN duplications (*1x2, *2x3)
     m = _DUPLICATION_RE.match(allele)
     if m:
         base_allele = m.group(1).lower()
@@ -100,12 +104,19 @@ def activity_score_for_allele(allele: str) -> float:
         base_score = ALLELE_ACTIVITY_SCORES.get(base_allele, 1.0)
         return base_score * n_copies
 
-    # Normalize: lowercase, strip trailing letters (e.g. *2A → *2)
+    # Handle Aldy v4 + notation: *1+*1 (tandem dup) or *4C+rs1058172 (modifier SNP)
+    # Sum scores of all star-allele components; ignore rs-number suffixes.
+    if "+" in allele:
+        parts = [p.strip() for p in allele.split("+")]
+        star_parts = [p for p in parts if p.startswith("*")]
+        if star_parts:
+            return sum(activity_score_for_allele(p) for p in star_parts)
+
+    # Normalize: lowercase, strip trailing letters (e.g. *2A → *2, *4C → *4)
     normalized = re.sub(r"[a-z]+$", "", allele.lower())
     if normalized in ALLELE_ACTIVITY_SCORES:
         return ALLELE_ACTIVITY_SCORES[normalized]
 
-    # Exact match attempt
     if allele in ALLELE_ACTIVITY_SCORES:
         return ALLELE_ACTIVITY_SCORES[allele]
 
