@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "AWS Batch Job Definition for the CYP2D6 per-sample worker.",
+    "",
+    "Before registering, replace the placeholders:",
+    "  <ACCOUNT_ID>   -- your 12-digit AWS account ID",
+    "  <REGION>       -- e.g. us-east-1",
+    "  <JOB_ROLE_ARN> -- IAM role ARN with s3:PutObject on the output bucket",
+    "",
+    "Register with:",
+    "  aws batch register-job-definition --cli-input-json file://batch/job_definition.json",
+    "",
+    "The container image is built from batch/Dockerfile and pushed to ECR.",
+    "See batch/submit_jobs.py for how jobs are submitted."
+  ],
+  "jobDefinitionName": "cyp2d6-process-sample",
+  "type": "container",
+  "containerProperties": {
+    "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/cyp2d6-pipeline:latest",
+    "vcpus": 2,
+    "memory": 4096,
+    "jobRoleArn": "<JOB_ROLE_ARN>",
+    "environment": [
+      {
+        "_comment": "Static env vars — per-sample values are injected at submit time via containerOverrides.",
+        "name": "OUTPUT_BUCKET",
+        "value": "1000genomes-cyp2d6-results"
+      },
+      {
+        "name": "OUTPUT_PREFIX",
+        "value": "results"
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/aws/batch/cyp2d6-pipeline",
+        "awslogs-region": "<REGION>",
+        "awslogs-stream-prefix": "cyp2d6"
+      }
+    },
+    "mountPoints": [],
+    "volumes": [],
+    "readonlyRootFilesystem": false,
+    "privileged": false
+  },
+  "retryStrategy": {
+    "attempts": 2,
+    "evaluateOnExit": [
+      {
+        "onExitCode": "1",
+        "action": "RETRY"
+      },
+      {
+        "onReason": "CannotPullContainerError:*",
+        "action": "RETRY"
+      }
+    ]
+  },
+  "timeout": {
+    "attemptDurationSeconds": 7200
+  },
+  "tags": {
+    "project": "cyp2d6-latam",
+    "pipeline": "batch-scale-up"
+  }
+}

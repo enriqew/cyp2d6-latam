@@ -1,0 +1,5 @@
+# Dependencies for the AWS Batch container image.
+# Intentionally minimal — no pandas/duckdb/dbt needed inside each job.
+
+aldy>=3.3
+boto3>=1.34

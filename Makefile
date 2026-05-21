@@ -38,3 +38,21 @@ clean:
 	rm -rf data/raw/ data/bam_slices/ data/exports/
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -name "*.pyc" -delete
+
+# ── AWS Batch scale-up ────────────────────────────────────────────────────────
+
+## Generate full 1000G manifest (queries EBI FTP — takes a few minutes)
+batch-manifest:
+	python ingest/sample_manifest.py > batch/manifest_all_pops.csv
+
+## Dry-run: print jobs that would be submitted without calling AWS Batch
+batch-dryrun:
+	python batch/submit_jobs.py --manifest batch/manifest_all_pops.csv --dry-run
+
+## Submit all samples to AWS Batch (requires batch/manifest_all_pops.csv)
+batch-submit:
+	python batch/submit_jobs.py --manifest batch/manifest_all_pops.csv
+
+## Aggregate per-sample S3 results into Gold artifacts (run after all jobs complete)
+batch-aggregate:
+	python batch/aggregate_results.py --bucket 1000genomes-cyp2d6-results --prefix results
