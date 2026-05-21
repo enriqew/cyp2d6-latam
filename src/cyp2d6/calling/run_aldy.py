@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -46,7 +47,8 @@ BAM_DIR = Path(__file__).parents[3] / "data" / "bam_slices"
 RAW_DIR = Path(__file__).parents[3] / "data" / "raw"
 
 ALDY_GENE = "cyp2d6"
-ALDY_GENOME = "hg38"
+ALDY_PROFILE = "illumina"   # 1000G low-coverage WGS
+ALDY_GENOME = "hg19"        # 1000G Phase 3 BAMs aligned to GRCh37/NCBI37
 
 
 # ── Aldy invocation ───────────────────────────────────────────────────────────
@@ -71,8 +73,9 @@ def run_aldy_for_sample(sample_id: str) -> Dict[str, Any]:
 
     cmd = [
         "aldy", "genotype",
-        "-p", ALDY_GENE,
-        "-g", ALDY_GENOME,
+        "-g", ALDY_GENE,
+        "-p", ALDY_PROFILE,
+        "--genome", ALDY_GENOME,
         str(bam_path),
         "-o", str(out_tsv),
     ]
@@ -101,46 +104,70 @@ def run_aldy_for_sample(sample_id: str) -> Dict[str, Any]:
         return _error_result(sample_id, "Aldy produced no output TSV")
 
     parsed = _parse_aldy_tsv(out_tsv, sample_id)
-    log.info(
-        "[%s] Genotype=%s  ActivityScore=%.2f  Phenotype=%s",
-        sample_id,
-        parsed.get("genotype", "?"),
-        parsed.get("activity_score", 0.0),
-        parsed.get("phenotype", "?"),
-    )
+    if parsed["status"] == "ok":
+        log.info(
+            "[%s] Genotype=%s  ActivityScore=%.2f  Phenotype=%s",
+            sample_id,
+            parsed.get("genotype", "?"),
+            parsed.get("activity_score") or 0.0,
+            parsed.get("phenotype", "?"),
+        )
     return parsed
 
 
 def _parse_aldy_tsv(tsv_path: Path, sample_id: str) -> Dict[str, Any]:
     """
-    Parse Aldy's TSV output into a structured dict.
+    Parse Aldy v4 TSV output into a structured dict.
 
-    Aldy TSV columns (space/tab separated, comment lines with #):
-        #Sample  Gene  Genotype  ActivityScore  Phenotype  [Solutions]
+    Aldy v4 format (tab-separated, verified against v4.8.3):
+      Header row:  #Sample Gene SolutionID Major Minor Copy Allele Location ...
+      Comment rows: #Solution N: *X/*Y; cpic=<phenotype>; cpic_score=<float>
+      Data rows:   one row per variant per copy
+
+    Key fields:
+      - Genotype: column "Major" (index 3) from the first data row
+      - ActivityScore + Phenotype: parsed from the #Solution 1 comment line
     """
+    _CPIC_MAP = {
+        "normal": "Normal Metabolizer",
+        "poor": "Poor Metabolizer",
+        "intermediate": "Intermediate Metabolizer",
+        "ultrarapid": "Ultrarapid Metabolizer",
+        "rapid": "Rapid Metabolizer",
+        "indeterminate": "Indeterminate",
+    }
+
     try:
         with open(tsv_path, encoding="utf-8") as fh:
-            lines = [ln.strip() for ln in fh if ln.strip() and not ln.startswith("##")]
+            lines = [ln.rstrip() for ln in fh if ln.strip()]
     except OSError as exc:
         return _error_result(sample_id, str(exc))
 
-    # Find the header line (starts with #Sample)
-    data_lines = [ln for ln in lines if not ln.startswith("#")]
-    if not data_lines:
-        return _error_result(sample_id, "No data rows in Aldy TSV")
+    genotype: str | None = None
+    activity_score: float | None = None
+    phenotype: str | None = None
+    solutions = 0
 
-    # Take the best solution (first data row)
-    parts = data_lines[0].split("\t")
-    if len(parts) < 5:
-        parts = data_lines[0].split()  # fallback: whitespace split
+    for line in lines:
+        if line.startswith("#Solution"):
+            solutions += 1
+            if solutions == 1:
+                m = re.search(r'cpic_score=([\d.]+)', line)
+                if m:
+                    activity_score = float(m.group(1))
+                m = re.search(r'cpic=(\w+)', line)
+                if m:
+                    key = m.group(1).lower()
+                    phenotype = _CPIC_MAP.get(key, key.title() + " Metabolizer")
 
-    try:
-        genotype = parts[2] if len(parts) > 2 else "unknown"
-        activity_score = float(parts[3]) if len(parts) > 3 else 0.0
-        phenotype = parts[4] if len(parts) > 4 else "unknown"
-        solutions = int(parts[5]) if len(parts) > 5 else 1
-    except (ValueError, IndexError) as exc:
-        return _error_result(sample_id, f"TSV parse error: {exc}")
+    data_rows = [ln for ln in lines if not ln.startswith("#")]
+    if data_rows:
+        parts = data_rows[0].split("\t")
+        if len(parts) > 3:
+            genotype = parts[3]  # "Major" column
+
+    if genotype is None:
+        return _error_result(sample_id, "Could not parse genotype from TSV")
 
     return {
         "sample_id": sample_id,

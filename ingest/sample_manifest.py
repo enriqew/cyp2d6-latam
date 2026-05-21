@@ -13,14 +13,12 @@ The BASE_URL pattern follows the 1000G EBI FTP structure:
 
 from __future__ import annotations
 
+import re
+import urllib.request
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
-BASE_URL = (
-    "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data"
-    "/{sample}/alignment"
-    "/{sample}.mapped.ILLUMINA.bwa.{pop}.low_coverage.20130415.bam"
-)
+FTP_BASE = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data"
 
 # ── Sample IDs per population ────────────────────────────────────────────────
 # Only the first 5 IDs are listed here as examples.
@@ -59,9 +57,47 @@ class SampleEntry:
     bai_url: str
 
 
+def find_mapped_bam_url(sample: str, pop: str) -> Tuple[str, str]:
+    """
+    Query the 1000G EBI FTP listing to find the actual mapped BAM URL.
+
+    Dates in filenames vary by sample (e.g. 20120522, 20121211). Rather than
+    hardcoding, we parse the directory listing at runtime and match the pattern:
+        {sample}.mapped.ILLUMINA.bwa.{POP}.low_coverage.{date}.bam
+
+    Returns (bam_url, bai_url).
+    Raises FileNotFoundError if no matching BAM is found.
+    """
+    dir_url = f"{FTP_BASE}/{sample}/alignment/"
+    with urllib.request.urlopen(dir_url, timeout=30) as resp:
+        html = resp.read().decode()
+
+    # Match any pop code in the filename — some samples have a different code
+    # on the FTP than their 1000G population assignment (e.g. HG01241 is CLM
+    # but its BAM is labelled PUR; HG00557 is PUR but labelled CHS).
+    pattern = (
+        rf'href="({re.escape(sample)}'
+        rf'\.mapped\.ILLUMINA\.bwa\.\w+'
+        rf'\.low_coverage\.\d+\.bam)"'
+    )
+    match = re.search(pattern, html)
+    if not match:
+        raise FileNotFoundError(
+            f"No mapped BAM found for {sample}/{pop} at {dir_url}"
+        )
+
+    filename = match.group(1)
+    bam_url = dir_url + filename
+    bai_url = bam_url + ".bai"
+    return bam_url, bai_url
+
+
 def build_manifest(populations: List[str] | None = None) -> List[SampleEntry]:
     """
     Build the list of SampleEntry objects for the given populations.
+
+    BAM URLs are discovered dynamically by querying the 1000G EBI FTP directory
+    listing — this handles per-sample date variations in filenames.
 
     Parameters
     ----------
@@ -81,8 +117,7 @@ def build_manifest(populations: List[str] | None = None) -> List[SampleEntry]:
         if pop not in POPULATION_SAMPLES:
             raise ValueError(f"Unknown population '{pop}'. Valid: {list(POPULATION_SAMPLES)}")
         for sample in POPULATION_SAMPLES[pop]:
-            bam_url = BASE_URL.format(sample=sample, pop=pop.lower())
-            bai_url = bam_url + ".bai"
+            bam_url, bai_url = find_mapped_bam_url(sample, pop)
             entries.append(SampleEntry(
                 sample_id=sample,
                 population=pop,

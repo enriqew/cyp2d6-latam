@@ -34,7 +34,10 @@ from pathlib import Path
 from sample_manifest import SampleEntry, build_manifest
 
 # ── Constants ────────────────────────────────────────────────────────────────
-CYP2D6_REGION = "chr22:42000000-42200000"
+# GRCh37/hg19 coordinates — 1000G Phase 3 BAMs use NCBI37, not GRCh38.
+# Chromosomes have no "chr" prefix. CYP2D6 locus ~42.52 Mb; 200 kb window
+# covers CYP2D6 + CYP2D7 pseudogene cluster needed for Aldy CNV calling.
+CYP2D6_REGION = "22:42400000-42650000"
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "bam_slices"
 
 logging.basicConfig(
