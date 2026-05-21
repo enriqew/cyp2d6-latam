@@ -155,89 +155,99 @@ total (vs ~12 h sequential on a laptop).
 **Data volume per job:** ~50 MB BAM slice (samtools HTTP range request) — never
 downloads the full 10–30 GB BAM.
 
-### Setup
+### Deployment
 
-#### 1. Build and push the Docker image
+#### Prerequisites
+
+- AWS CLI v2 configured with credentials that have permissions to create IAM roles,
+  Batch resources, ECR repositories, and CloudWatch Log Groups.
+- Docker (for building and pushing the worker image).
+- `jq` (optional but recommended — used by `deploy.sh` to strip JSON comments before
+  registering the job definition).
+
+#### One-command deployment
 
 ```bash
-# Authenticate to ECR
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin \
-    <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+export AWS_ACCOUNT_ID=123456789012
+export AWS_REGION=us-east-1
+export VPC_ID=vpc-0123456789abcdef0
+export SUBNET_IDS=subnet-aaa,subnet-bbb   # comma-separated, no spaces
+export OUTPUT_BUCKET=1000genomes-cyp2d6-results   # optional, this is the default
 
-# Build
-docker build -f batch/Dockerfile -t cyp2d6-pipeline .
-
-# Tag and push
-docker tag cyp2d6-pipeline:latest \
-  <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cyp2d6-pipeline:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cyp2d6-pipeline:latest
+make batch-deploy
 ```
 
-#### 2. Register the job definition
+`make batch-deploy` runs `batch/deploy.sh`, which:
 
-Edit `batch/job_definition.json` — replace `<ACCOUNT_ID>`, `<REGION>`, and
-`<JOB_ROLE_ARN>` — then:
+1. **CloudFormation** — creates the Compute Environment (EC2 Spot), Job Queue,
+   IAM roles (service role, instance role, job role), Security Group, and
+   CloudWatch Log Group `/aws/batch/cyp2d6-latam`.
+2. **ECR push** — builds the Docker image from `batch/Dockerfile` and pushes it to
+   `<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/cyp2d6-latam-batch:latest`.
+3. **Job definition** — instantiates `batch/job_definition.json.tpl` with the
+   CloudFormation outputs (job role ARN) and registers it with the Batch API.
+4. **Verification** — polls the Job Queue until it reaches `VALID` state.
 
-```bash
-aws batch register-job-definition \
-  --cli-input-json file://batch/job_definition.json
-```
+The deploy is idempotent: running it again updates the stack if the template changed
+and pushes a new image tag.
 
-The job role needs `s3:PutObject` on the output bucket.
-
-#### 3. Generate the full manifest
-
-```bash
-python ingest/sample_manifest.py > batch/manifest_all_pops.csv
-```
-
-This queries the EBI FTP to discover the exact BAM URL for every sample and
-writes a CSV with columns `sample_id,population,bam_url`.
-
-#### 4. Submit jobs
+#### Step-by-step (after deployment)
 
 ```bash
-# Smoke test: 10 samples, no actual submission
+# 1. Generate the full 1000G sample manifest (queries EBI FTP — a few minutes)
+make batch-manifest
+
+# 2. Smoke test: verify 10 jobs would be submitted correctly
 python batch/submit_jobs.py \
   --manifest batch/manifest_all_pops.csv \
   --limit 10 --dry-run
 
-# Submit all samples
-python batch/submit_jobs.py \
-  --manifest batch/manifest_all_pops.csv \
-  --output-bucket 1000genomes-cyp2d6-results
+# 3. Submit all ~2,500 jobs
+make batch-submit
 
-# Submit a single population
-python batch/submit_jobs.py \
-  --manifest batch/manifest_all_pops.csv \
-  --populations MXL,PEL
-```
+# 4. Monitor progress
+make batch-status          # lists RUNNING / PENDING / FAILED jobs
+make batch-logs            # streams CloudWatch logs from the most recent job
 
-#### 5. Aggregate results
+# 5. After all jobs reach SUCCEEDED — aggregate and export Gold artifacts
+make batch-aggregate
 
-After all Batch jobs reach SUCCEEDED status:
-
-```bash
-python batch/aggregate_results.py \
-  --bucket 1000genomes-cyp2d6-results \
-  --prefix results
-```
-
-This downloads the per-sample JSONs, runs Silver + Gold transformations, and
-writes the four portfolio JSON artifacts to `data/exports/`. Copy them to the
-portfolio repo:
-
-```bash
+# 6. Copy artifacts to the portfolio repo
 cp data/exports/*.json ../data-dive-design-hub/src/data/cyp2d6/
+```
+
+#### Cost estimate (Spot EC2)
+
+| Item | Value |
+|---|---|
+| Jobs | ~2,500 samples × ~2 min each |
+| Compute (sequential wall time) | ~83 vCPU-hours |
+| Concurrency (500 jobs in parallel) | wall time ~10–20 min |
+| Instance type | c5.xlarge (4 vCPU / 8 GB) — 2 vCPU used per job |
+| Spot price (us-east-1, c5.xlarge) | ~$0.04–0.06/vCPU-hour |
+| **Estimated total** | **< $5** |
+
+Spot interruptions are handled via `retryStrategy.attempts: 2` in the job definition.
+
+#### Tear-down
+
+To delete all AWS resources created by the stack:
+
+```bash
+aws cloudformation delete-stack --stack-name cyp2d6-latam-batch --region "$AWS_REGION"
+aws ecr delete-repository --repository-name cyp2d6-latam-batch --force --region "$AWS_REGION"
 ```
 
 ### Files
 
 | File | Purpose |
 |---|---|
+| `batch/cloudformation.yaml` | CloudFormation template: Compute Env, Job Queue, IAM, Log Group |
+| `batch/deploy.sh` | Orchestration script: CFN deploy → ECR push → job definition register → verify |
+| `batch/ecr_push.sh` | Build Docker image and push to ECR |
+| `batch/job_definition.json.tpl` | `envsubst` template for the job definition (no hardcoded ARNs) |
+| `batch/job_definition.json` | Static reference copy with `<PLACEHOLDER>` values (for documentation) |
 | `batch/Dockerfile` | Container image: python:3.11-slim + samtools + Aldy |
-| `batch/job_definition.json` | AWS Batch job definition (register once) |
 | `batch/submit_jobs.py` | Read manifest CSV, submit one Batch job per sample |
 | `batch/process_sample.py` | Worker: slice → Aldy → upload JSON to S3 (runs in container) |
 | `batch/aggregate_results.py` | Reducer: download S3 JSONs → Silver → Gold → portfolio artifacts |

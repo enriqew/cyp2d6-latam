@@ -2,12 +2,17 @@
   "_comment": [
     "AWS Batch Job Definition for the CYP2D6 per-sample worker.",
     "",
-    "Before registering, replace the placeholders:",
+    "PREFERRED: use batch/job_definition.json.tpl with envsubst — batch/deploy.sh",
+    "           handles this automatically.",
+    "",
+    "Manual registration (after substituting placeholders):",
     "  <ACCOUNT_ID>   -- your 12-digit AWS account ID",
     "  <REGION>       -- e.g. us-east-1",
-    "  <JOB_ROLE_ARN> -- IAM role ARN with s3:PutObject on the output bucket",
+    "  <JOB_ROLE_ARN> -- output of: aws cloudformation describe-stacks",
+    "                    --stack-name cyp2d6-latam-batch",
+    "                    --query 'Stacks[0].Outputs[?OutputKey==`JobRoleArn`].OutputValue' --output text",
+    "  <OUTPUT_BUCKET> -- S3 bucket for results, e.g. 1000genomes-cyp2d6-results",
     "",
-    "Register with:",
     "  aws batch register-job-definition --cli-input-json file://batch/job_definition.json",
     "",
     "The container image is built from batch/Dockerfile and pushed to ECR.",
@@ -16,7 +21,7 @@
   "jobDefinitionName": "cyp2d6-process-sample",
   "type": "container",
   "containerProperties": {
-    "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/cyp2d6-pipeline:latest",
+    "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/cyp2d6-latam-batch:latest",
     "vcpus": 2,
     "memory": 4096,
     "jobRoleArn": "<JOB_ROLE_ARN>",
@@ -24,7 +29,7 @@
       {
         "_comment": "Static env vars — per-sample values are injected at submit time via containerOverrides.",
         "name": "OUTPUT_BUCKET",
-        "value": "1000genomes-cyp2d6-results"
+        "value": "<OUTPUT_BUCKET>"
       },
       {
         "name": "OUTPUT_PREFIX",
@@ -34,7 +39,7 @@
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
-        "awslogs-group": "/aws/batch/cyp2d6-pipeline",
+        "awslogs-group": "/aws/batch/cyp2d6-latam",
         "awslogs-region": "<REGION>",
         "awslogs-stream-prefix": "cyp2d6"
       }

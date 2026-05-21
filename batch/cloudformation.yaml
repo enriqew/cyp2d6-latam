@@ -1,0 +1,237 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AWS Batch infrastructure for the CYP2D6 LATAM pipeline.
+  Compute Environment (EC2 Spot), Job Queue, IAM role, and CloudWatch Log Group.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ─────────────────────────────────────────────────────────────────────────────
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cyp2d6-latam
+    Description: Used as a prefix for all resource names and tags.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the Batch Compute Environment will run.
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >
+      Comma-separated list of subnet IDs (at least one).
+      Use private subnets with a NAT gateway for S3/EBI FTP access.
+
+  OutputBucket:
+    Type: String
+    Default: 1000genomes-cyp2d6-results
+    Description: S3 bucket where per-sample aldy_output.json files are written.
+
+  MaxvCpus:
+    Type: Number
+    Default: 200
+    Description: Maximum vCPUs for the Spot Compute Environment.
+
+  InstanceTypes:
+    Type: CommaDelimitedList
+    Default: "c5.xlarge,m5.xlarge"
+    Description: EC2 instance types eligible for the Spot fleet.
+
+  SpotBidPercentage:
+    Type: Number
+    Default: 60
+    Description: Maximum percentage of On-Demand price to bid for Spot capacity.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resources
+# ─────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── CloudWatch Log Group ───────────────────────────────────────────────────
+  BatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/batch/cyp2d6-latam
+      RetentionInDays: 30
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+
+  # ── IAM: Service Role for Batch Compute Environment ───────────────────────
+  BatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-batch-service-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: batch.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+
+  # ── IAM: Instance Profile for EC2 nodes ───────────────────────────────────
+  BatchInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-batch-instance-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+
+  BatchInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${ProjectName}-batch-instance-profile"
+      Roles:
+        - !Ref BatchInstanceRole
+
+  # ── IAM: Job Role (attached to each container) ────────────────────────────
+  BatchJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-batch-job-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-job-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Write per-sample results to the output bucket
+              - Sid: S3WriteOutputs
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub "arn:aws:s3:::${OutputBucket}/*"
+
+              # Read the 1000 Genomes public bucket (BAI index files)
+              # The BAM data itself is served over public HTTPS — no S3 perms needed.
+              - Sid: S3Read1000G
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - arn:aws:s3:::1000genomes
+                  - arn:aws:s3:::1000genomes/*
+
+              # Write CloudWatch Logs (container stdout/stderr)
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/batch/cyp2d6-latam:*"
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+
+  # ── Security Group for Batch instances ────────────────────────────────────
+  BatchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-batch-sg"
+      GroupDescription: Outbound-only security group for Batch EC2 instances
+      VpcId: !Ref VpcId
+      # No inbound rules — jobs only need outbound internet (EBI FTP, ECR, S3, CW Logs)
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: Allow all outbound traffic
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-batch-sg"
+        - Key: project
+          Value: !Ref ProjectName
+
+  # ── Compute Environment (EC2 Spot) ────────────────────────────────────────
+  BatchComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      ComputeEnvironmentName: !Sub "${ProjectName}-compute-env"
+      Type: MANAGED
+      State: ENABLED
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      ComputeResources:
+        Type: SPOT
+        AllocationStrategy: SPOT_CAPACITY_OPTIMIZED
+        BidPercentage: !Ref SpotBidPercentage
+        MinvCpus: 0
+        MaxvCpus: !Ref MaxvCpus
+        DesiredvCpus: 0
+        InstanceTypes: !Ref InstanceTypes
+        Subnets: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        InstanceRole: !GetAtt BatchInstanceProfile.Arn
+        Tags:
+          project: !Ref ProjectName
+      Tags:
+        project: !Ref ProjectName
+
+  # ── Job Queue ─────────────────────────────────────────────────────────────
+  BatchJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: !Sub "${ProjectName}-queue"
+      State: ENABLED
+      Priority: 10
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref BatchComputeEnvironment
+      Tags:
+        project: !Ref ProjectName
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ─────────────────────────────────────────────────────────────────────────────
+Outputs:
+  ComputeEnvironmentArn:
+    Description: ARN of the Batch Compute Environment
+    Value: !Ref BatchComputeEnvironment
+    Export:
+      Name: !Sub "${ProjectName}-compute-env-arn"
+
+  JobQueueArn:
+    Description: ARN of the Batch Job Queue
+    Value: !Ref BatchJobQueue
+    Export:
+      Name: !Sub "${ProjectName}-job-queue-arn"
+
+  JobQueueName:
+    Description: Name of the Batch Job Queue (used in submit_jobs.py)
+    Value: !Sub "${ProjectName}-queue"
+    Export:
+      Name: !Sub "${ProjectName}-job-queue-name"
+
+  JobRoleArn:
+    Description: ARN of the IAM role attached to each Batch job container
+    Value: !GetAtt BatchJobRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}-job-role-arn"
+
+  LogGroupName:
+    Description: CloudWatch Log Group for Batch job output
+    Value: !Ref BatchLogGroup
+    Export:
+      Name: !Sub "${ProjectName}-log-group"
