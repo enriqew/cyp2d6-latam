@@ -92,7 +92,7 @@ Before spending a dollar, set up a cost alert in AWS Console:
 1. Go to **Billing → Budgets → Create Budget**
 2. Type: Cost budget
 3. Amount: $25
-4. Alert threshold: 80% ($20) → email `enrique@eredonda.com`
+4. Alert threshold: 80% ($20) → email `<your-email>`
 5. Also enable **AWS Cost Anomaly Detection** (free) for automated alerts
 
 ---
