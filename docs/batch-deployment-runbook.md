@@ -46,7 +46,7 @@ data/exports/*.json  →  copy to portfolio src/data/cyp2d6/
 ## Prerequisites
 
 ### AWS account
-- Account ID: `<AWS_ACCOUNT_ID>` (your existing account)
+- Account ID: `<YOUR_ACCOUNT_ID>` (find it with `aws sts get-caller-identity --query Account --output text`)
 - Recommended region: `us-east-1` (same region as 1000 Genomes S3 data — avoids data transfer costs)
 
 ### IAM user with permissions
@@ -100,7 +100,7 @@ Before spending a dollar, set up a cost alert in AWS Console:
 ## Step 1 — Set environment variables
 
 ```bash
-export AWS_ACCOUNT_ID=<AWS_ACCOUNT_ID>
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export AWS_REGION=us-east-1
 export VPC_ID=vpc-xxxxxxxx           # your default VPC — find with: aws ec2 describe-vpcs --filters Name=isDefault,Values=true
 export SUBNET_IDS=subnet-xxx,subnet-yyy  # subnets in your VPC — find with: aws ec2 describe-subnets
@@ -121,7 +121,7 @@ aws ec2 describe-subnets --filters Name=defaultForAz,Values=true --query 'Subnet
 ## Step 2 — Deploy infrastructure (one-time, ~5 min)
 
 ```bash
-cd <HOME>/PycharmProjects/cyp2d6-latam
+cd /path/to/cyp2d6-latam
 make batch-deploy
 ```
 
@@ -208,14 +208,14 @@ ls -lh data/exports/
 
 # Copy to portfolio
 cp data/exports/allele_frequencies.json \
-   <HOME>/PycharmProjects/data-dive-design-hub/public/data/cyp2d6/
+   /path/to/data-dive-design-hub/public/data/cyp2d6/
 
 cp data/exports/phenotype_distribution.json \
    data/exports/drug_impact_summary.json \
-   <HOME>/PycharmProjects/data-dive-design-hub/src/data/cyp2d6/
+   /path/to/data-dive-design-hub/src/data/cyp2d6/
 
 # Commit in portfolio
-cd <HOME>/PycharmProjects/data-dive-design-hub
+cd /path/to/data-dive-design-hub
 git add src/data/cyp2d6/ public/data/cyp2d6/
 git commit -m "data(cyp2d6): refresh to full 1000G dataset (n=2504, 26 populations)"
 ```
