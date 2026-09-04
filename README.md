@@ -13,8 +13,8 @@ distributions, and drug impact summaries compatible with the pgx-latam-atlas sch
 CYP2D6 is pharmacogenomically unique: patients can carry **zero copies** of the gene
 (*5, complete deletion → poor metabolizer) or **three or more copies** (ultrarapid
 metabolizer). Standard VCF-based pipelines are blind to these copy number variants.
-A *5/*5 patient appears to have no variants in the VCF — indistinguishable from a
-normal *1/*1 metabolizer — leading to potential clinical misclassification.
+A *5/*5 patient appears to have no variants in the VCF, indistinguishable from a
+normal *1/*1 metabolizer, leading to potential clinical misclassification.
 
 [Aldy](https://github.com/inumanag/aldy) integrates SNP + CNV calling on BAM files,
 producing diplotype calls (e.g. `*1/*4`, `*5/*41`, `*1x2/*1`) with activity scores.
@@ -91,7 +91,7 @@ make test
 
 | Drug | Affected phenotypes | Recommendation |
 |---|---|---|
-| Codeine | PM, UM | Avoid — risk of inefficacy (PM) or respiratory depression (UM) |
+| Codeine | PM, UM | Avoid, risk of inefficacy (PM) or respiratory depression (UM) |
 | Tramadol | PM, UM | Same as codeine |
 | Tamoxifen | PM, IM | Alternative (PM); standard + monitoring (IM) |
 | Amitriptyline | PM, IM | Reduce dose 50% (PM); reduce 25% (IM) |
@@ -107,7 +107,7 @@ src/cyp2d6/
 dbt_project/             Optional dbt models for the Gold layer
 tests/                   Unit tests (pytest)
 schemas/                 JSON Schema definitions for output artifacts
-data/                    .gitignored — raw BAMs, slices, exports
+data/                    .gitignored, raw BAMs, slices, exports
 ```
 
 ## Scale-Up: All 1000G Populations
@@ -150,11 +150,11 @@ batch/aggregate_results.py
 data/exports/*.json  ──►  copy to portfolio src/data/cyp2d6/
 ```
 
-**Parallelism:** each Batch job is isolated — 2 vCPU / 4 GB RAM, 2 h timeout.
+**Parallelism:** each Batch job is isolated, 2 vCPU / 4 GB RAM, 2 h timeout.
 With a queue of 500 concurrent jobs, ~2,500 samples finish in roughly 15–30 min
 total (vs ~12 h sequential on a laptop).
 
-**Data volume per job:** ~50 MB BAM slice (samtools HTTP range request) — never
+**Data volume per job:** ~50 MB BAM slice (samtools HTTP range request), never
 downloads the full 10–30 GB BAM.
 
 ### Deployment
@@ -164,7 +164,7 @@ downloads the full 10–30 GB BAM.
 - AWS CLI v2 configured with credentials that have permissions to create IAM roles,
   Batch resources, ECR repositories, and CloudWatch Log Groups.
 - Docker (for building and pushing the worker image).
-- `jq` (optional but recommended — used by `deploy.sh` to strip JSON comments before
+- `jq` (optional but recommended, used by `deploy.sh` to strip JSON comments before
   registering the job definition).
 
 #### One-command deployment
@@ -181,14 +181,14 @@ make batch-deploy
 
 `make batch-deploy` runs `batch/deploy.sh`, which:
 
-1. **CloudFormation** — creates the Compute Environment (EC2 Spot), Job Queue,
+1. **CloudFormation**: creates the Compute Environment (EC2 Spot), Job Queue,
    IAM roles (service role, instance role, job role), Security Group, and
    CloudWatch Log Group `/aws/batch/cyp2d6-latam`.
-2. **ECR push** — builds the Docker image from `batch/Dockerfile` and pushes it to
+2. **ECR push**: builds the Docker image from `batch/Dockerfile` and pushes it to
    `<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/cyp2d6-latam-batch:latest`.
-3. **Job definition** — instantiates `batch/job_definition.json.tpl` with the
+3. **Job definition**: instantiates `batch/job_definition.json.tpl` with the
    CloudFormation outputs (job role ARN) and registers it with the Batch API.
-4. **Verification** — polls the Job Queue until it reaches `VALID` state.
+4. **Verification**: polls the Job Queue until it reaches `VALID` state.
 
 The deploy is idempotent: running it again updates the stack if the template changed
 and pushes a new image tag.
@@ -196,7 +196,7 @@ and pushes a new image tag.
 #### Step-by-step (after deployment)
 
 ```bash
-# 1. Generate the full 1000G sample manifest (queries EBI FTP — a few minutes)
+# 1. Generate the full 1000G sample manifest (queries EBI FTP: a few minutes)
 make batch-manifest
 
 # 2. Smoke test: verify 10 jobs would be submitted correctly
@@ -211,7 +211,7 @@ make batch-submit
 make batch-status          # lists RUNNING / PENDING / FAILED jobs
 make batch-logs            # streams CloudWatch logs from the most recent job
 
-# 5. After all jobs reach SUCCEEDED — aggregate and export Gold artifacts
+# 5. After all jobs reach SUCCEEDED: aggregate and export Gold artifacts
 make batch-aggregate
 
 # 6. Copy artifacts to the portfolio repo
@@ -225,7 +225,7 @@ cp data/exports/*.json ../data-dive-design-hub/src/data/cyp2d6/
 | Jobs | ~2,500 samples × ~2 min each |
 | Compute (sequential wall time) | ~83 vCPU-hours |
 | Concurrency (500 jobs in parallel) | wall time ~10–20 min |
-| Instance type | c5.xlarge (4 vCPU / 8 GB) — 2 vCPU used per job |
+| Instance type | c5.xlarge (4 vCPU / 8 GB), 2 vCPU used per job |
 | Spot price (us-east-1, c5.xlarge) | ~$0.04–0.06/vCPU-hour |
 | **Estimated total** | **< $5** |
 

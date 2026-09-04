@@ -1,4 +1,4 @@
-# CYP2D6 AWS Batch Full Run — Deployment Runbook
+# CYP2D6 AWS Batch Full Run: Deployment Runbook
 
 Scale the CYP2D6 pipeline from 452 LATAM samples to all ~2,500 individuals across 26 populations in 1000 Genomes, using AWS Batch for parallel processing.
 
@@ -27,7 +27,7 @@ manifest.csv (2,504 rows)
 batch/submit_jobs.py
     │  one AWS Batch job per sample
     ▼
-[AWS Batch Compute Environment — 50 Spot vCPUs]
+[AWS Batch Compute Environment, 50 Spot vCPUs]
     │
     ├── process_sample.py (per job, runs inside Docker container)
     │     1. samtools view → remote BAM slice (chr22 CYP2D6 region, ~50 MB)
@@ -47,7 +47,7 @@ data/exports/*.json  →  copy to portfolio src/data/cyp2d6/
 
 ### AWS account
 - Account ID: `<YOUR_ACCOUNT_ID>` (find it with `aws sts get-caller-identity --query Account --output text`)
-- Recommended region: `us-east-1` (same region as 1000 Genomes S3 data — avoids data transfer costs)
+- Recommended region: `us-east-1` (same region as 1000 Genomes S3 data, avoids data transfer costs)
 
 ### IAM user with permissions
 Create an IAM user (or use an existing one) with these policies:
@@ -86,7 +86,7 @@ aws sts get-caller-identity
 
 ---
 
-## Step 0 — Budget protection (do this FIRST)
+## Step 0: Budget protection (do this FIRST)
 
 Before spending a dollar, set up a cost alert in AWS Console:
 1. Go to **Billing → Budgets → Create Budget**
@@ -97,13 +97,13 @@ Before spending a dollar, set up a cost alert in AWS Console:
 
 ---
 
-## Step 1 — Set environment variables
+## Step 1: Set environment variables
 
 ```bash
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export AWS_REGION=us-east-1
-export VPC_ID=vpc-xxxxxxxx           # your default VPC — find with: aws ec2 describe-vpcs --filters Name=isDefault,Values=true
-export SUBNET_IDS=subnet-xxx,subnet-yyy  # subnets in your VPC — find with: aws ec2 describe-subnets
+export VPC_ID=vpc-xxxxxxxx           # your default VPC, find with: aws ec2 describe-vpcs --filters Name=isDefault,Values=true
+export SUBNET_IDS=subnet-xxx,subnet-yyy  # subnets in your VPC, find with: aws ec2 describe-subnets
 export OUTPUT_BUCKET=cyp2d6-latam-results
 
 # Create the S3 output bucket (if it doesn't exist)
@@ -118,7 +118,7 @@ aws ec2 describe-subnets --filters Name=defaultForAz,Values=true --query 'Subnet
 
 ---
 
-## Step 2 — Deploy infrastructure (one-time, ~5 min)
+## Step 2: Deploy infrastructure (one-time, ~5 min)
 
 ```bash
 cd /path/to/cyp2d6-latam
@@ -126,7 +126,7 @@ make batch-deploy
 ```
 
 This runs `batch/deploy.sh` which:
-1. Deploys the CloudFormation stack (`cyp2d6-latam-batch`) — Spot compute environment, job queue, IAM roles, log group
+1. Deploys the CloudFormation stack (`cyp2d6-latam-batch`), Spot compute environment, job queue, IAM roles, log group
 2. Builds the Docker image and pushes to ECR
 3. Registers the job definition
 
@@ -144,13 +144,13 @@ If CloudFormation fails, check the Events tab in the CloudFormation console for 
 
 ---
 
-## Step 3 — Validate with 10 samples (RECOMMENDED before full run)
+## Step 3: Validate with 10 samples (RECOMMENDED before full run)
 
 ```bash
 # Build the manifest for all populations
 make batch-manifest
 
-# Dry run — shows what would be submitted
+# Dry run: shows what would be submitted
 make batch-dryrun -- --populations PEL --limit 10
 
 # Submit 10 PEL samples only
@@ -165,18 +165,18 @@ python batch/submit_jobs.py \
 # Monitor
 make batch-status
 
-# After jobs complete (5-10 min), check S3 output
+# After jobs complete (5-10 min): check S3 output
 aws s3 ls s3://$OUTPUT_BUCKET/PEL/ --recursive | head -20
 
 # Check one output file
 aws s3 cp s3://$OUTPUT_BUCKET/PEL/$(aws s3 ls s3://$OUTPUT_BUCKET/PEL/ | head -1 | awk '{print $4}') - | python3 -m json.tool | head -30
 ```
 
-If the 10-sample test produces valid JSON outputs with `diplotype`, `phenotype`, and `activity_score` fields — you're good to run the full dataset.
+If the 10-sample test produces valid JSON outputs with `diplotype`, `phenotype`, and `activity_score` fields, you're good to run the full dataset.
 
 ---
 
-## Step 4 — Full run (~1.7 hours)
+## Step 4: Full run (~1.7 hours)
 
 ```bash
 # Submit all 2,504 jobs
@@ -197,7 +197,7 @@ make batch-logs
 
 ---
 
-## Step 5 — Aggregate results (~5 min)
+## Step 5: Aggregate results (~5 min)
 
 ```bash
 # Download all S3 outputs and run Silver + Gold pipeline
@@ -222,18 +222,18 @@ git commit -m "data(cyp2d6): refresh to full 1000G dataset (n=2504, 26 populatio
 
 ---
 
-## Step 6 — Teardown (optional, saves ~$0/month since Batch is serverless)
+## Step 6: Teardown (optional, saves ~$0/month since Batch is serverless)
 
-The Batch compute environment scales to 0 when idle — no ongoing cost. But if you want to clean up completely:
+The Batch compute environment scales to 0 when idle, no ongoing cost. But if you want to clean up completely:
 
 ```bash
-# Delete the CloudFormation stack (removes compute environment, job queue, IAM roles)
+# Delete the CloudFormation stack (removes compute environment: job queue, IAM roles)
 aws cloudformation delete-stack --stack-name cyp2d6-latam-batch --region $AWS_REGION
 
 # Delete ECR repository (optional)
 aws ecr delete-repository --repository-name cyp2d6-latam-batch --force --region $AWS_REGION
 
-# Delete S3 output bucket (optional — removes ~2,504 JSON files)
+# Delete S3 output bucket (optional: removes ~2,504 JSON files)
 aws s3 rm s3://$OUTPUT_BUCKET --recursive
 aws s3 rb s3://$OUTPUT_BUCKET
 ```
@@ -284,7 +284,7 @@ The job uploads a `status=error` JSON and exits with code 1. Batch marks it as F
 After full run, check how many failed:
 ```bash
 aws s3 ls s3://$OUTPUT_BUCKET/ --recursive | grep aldy_output.json | wc -l
-# Compare to 2504 — difference is failed samples
+# Compare to 2504: difference is failed samples
 ```
 
 ---
@@ -294,7 +294,7 @@ aws s3 ls s3://$OUTPUT_BUCKET/ --recursive | grep aldy_output.json | wc -l
 This pipeline is a showcase for several distinct engineering topics:
 
 ### 1. Remote BAM slicing at scale
-The key insight: 1000 Genomes BAMs are ~10-30 GB each but CYP2D6 is ~200 kb. `samtools view` with a region specifier against an S3 CRAM/BAM URL pulls only the relevant index bytes + the region reads. 2,504 samples × ~50 MB slice = ~125 GB transferred instead of ~5 TB. This is the fundamental technique for genomics data engineering at scale — you never download what you don't need.
+The key insight: 1000 Genomes BAMs are ~10-30 GB each but CYP2D6 is ~200 kb. `samtools view` with a region specifier against an S3 CRAM/BAM URL pulls only the relevant index bytes + the region reads. 2,504 samples × ~50 MB slice = ~125 GB transferred instead of ~5 TB. This is the fundamental technique for genomics data engineering at scale, you never download what you don't need.
 
 ### 2. Embarrassingly parallel bioinformatics
 CYP2D6 genotyping is per-sample independent. AWS Batch with a job-per-sample pattern is the canonical approach: static job definition, per-sample environment variable injection via `containerOverrides`, Spot for cost, retry for resilience. The submit script throttles at 20 jobs/sec to avoid AWS API rate limits.
@@ -306,4 +306,4 @@ Bronze (raw BAM slices) → Silver (Aldy TSV + CPIC phenotype mapping) → Gold 
 CYP2D6 is the hardest pharmacogene to call: pseudogene interference (CYP2D7 at 92% identity), CNVs (*5 deletion, xN duplication), hybrid alleles. Aldy solves this by using read depth + variant phasing together. The `*1+*1` tandem duplication notation bug (Aldy v4 → pipeline UM misclassification) is a good engineering war story about the gap between tool documentation and actual output format.
 
 ### 5. Population PGx at 1000G scale
-Running this on all 26 populations turns the LATAM atlas into a global atlas. The clinical story shifts from "LATAM is different from European baseline" to "every major ancestry group has a distinct pharmacogenomic profile" — which is the actual scientific finding. The data supports this as a general argument for pre-prescription genotyping, not a region-specific one.
+Running this on all 26 populations turns the LATAM atlas into a global atlas. The clinical story shifts from "LATAM is different from European baseline" to "every major ancestry group has a distinct pharmacogenomic profile", which is the actual scientific finding. The data supports this as a general argument for pre-prescription genotyping, not a region-specific one.
