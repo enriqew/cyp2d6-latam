@@ -1,7 +1,7 @@
 """
 slice_bams.py
 -------------
-Remote BAM slicing for the CYP2D6 locus (chr22:42,000,000–42,200,000).
+Remote BAM slicing for the CYP2D6 locus (22:42,400,000-42,650,000, GRCh37/hg19).
 
 Strategy
 --------
@@ -10,7 +10,7 @@ samtools can stream only the region of interest over HTTP/HTTPS using the
 remote index (.bai). This reduces per-sample transfer from ~15 GB to ~50 MB.
 
 Total data volume estimate:
-    347 samples × ~50 MB/sample ≈ 17 GB
+    452 samples x ~50 MB/sample ~= 23 GB
 
 Requirements
 ------------

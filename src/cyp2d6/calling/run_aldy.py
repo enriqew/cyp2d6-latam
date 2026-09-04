@@ -11,7 +11,8 @@ because standard VCF-based callers cannot detect:
 Requirements
 ------------
     pip install aldy>=3.3
-    # Reference genome: GRCh38/hg38 (Aldy downloads it automatically on first run,
+    # Reference genome: GRCh37/hg19, matching the 1000G Phase 3 alignments
+    # (Aldy downloads it automatically on first run,
     # or point ALDY_DB to a local copy)
 
 Aldy output format (TSV)

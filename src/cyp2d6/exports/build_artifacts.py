@@ -30,6 +30,10 @@ from typing import Any, Dict
 
 import pandas as pd
 
+# Samples successfully sliced from the 1000G Phase 3 BAMs for this cohort.
+# Update alongside the ingest manifest when the cohort changes.
+SAMPLES_SLICED = 452
+
 log = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -96,6 +100,12 @@ def build_metadata_json(
         .to_dict()
     )
 
+    # Samples sliced vs samples Aldy could call. Hardcoding this drifts the
+    # moment the cohort changes, which is exactly what happened before.
+    n_called = sum(pop_counts.values())
+    n_sliced = SAMPLES_SLICED
+    n_excluded = n_sliced - n_called
+
     return {
         "gene": "CYP2D6",
         "pipeline_version": "1.0.0",
@@ -115,8 +125,8 @@ def build_metadata_json(
         "drugs_covered": list(df_drug["drug"].unique()),
         "phenotype_categories": ["UM", "NM", "IM", "PM"],
         "limitations": [
-            "Low-coverage WGS (~4x) — Aldy CNV detection less reliable below 10x",
-            "16/452 samples excluded: average coverage below Aldy threshold",
+            "Low-coverage WGS (~4x): Aldy CNV detection less reliable below 10x",
+            f"{n_excluded}/{n_sliced} samples excluded: average coverage below Aldy threshold",
             "Ultrarapid duplication counts depend on read depth at gene boundaries",
             "Indeterminate calls reflect novel/complex alleles not yet in CPIC — common in admixed LATAM populations",
         ],

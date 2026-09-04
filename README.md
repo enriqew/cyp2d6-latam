@@ -1,8 +1,10 @@
 # cyp2d6-latam
 
+**Live demo:** [eredonda.com/projects/cyp2d6-latam](https://eredonda.com/projects/cyp2d6-latam?utm_source=github&utm_medium=referral)
+
 CYP2D6 star allele calling pipeline for Latin American populations using Aldy.
 
-Covers MXL (n=64), PEL (n=85), CLM (n=94), PUR (n=104) + CEU European reference
+Covers MXL (n=62), PEL (n=85), CLM (n=93), PUR (n=97) and the CEU European reference (n=97): 434 samples called out of 452 sliced
 from 1000 Genomes Phase 3. Outputs population-level allele frequencies, phenotype
 distributions, and drug impact summaries compatible with the pgx-latam-atlas schema.
 
@@ -22,11 +24,11 @@ producing diplotype calls (e.g. `*1/*4`, `*5/*41`, `*1x2/*1`) with activity scor
 | Approach | Data volume | Feasibility |
 |---|---|---|
 | Download full 1000G BAMs | ~5 TB | Impractical without dedicated storage |
-| Remote BAM slicing (this pipeline) | ~17 GB (347 × ~50 MB) | Laptop or small cloud instance |
+| Remote BAM slicing (this pipeline) | ~23 GB (452 × ~50 MB) | Laptop or small cloud instance |
 
 `samtools view` can stream only the bytes covering a genomic region by fetching
 relevant BGZF blocks from the remote file, guided by the remote `.bai` index.
-We extract only `chr22:42,000,000–42,200,000` (~200 kb) per sample.
+We extract only `22:42,400,000-42,650,000` (~250 kb) per sample, in GRCh37/hg19 coordinates, which is what the 1000 Genomes Phase 3 BAMs are aligned to.
 
 ## Pipeline
 
@@ -259,8 +261,36 @@ aws ecr delete-repository --repository-name cyp2d6-latam-batch --force --region 
 
 - Low-coverage WGS (~4x): Aldy CNV detection is less reliable below 10×. Activity
   scores for structural alleles (*5, xN duplications) should be interpreted with caution.
-- Small sample sizes (n=64–104 per population): frequency estimates have wide confidence
+- Small sample sizes (n=62-97 per population): frequency estimates have wide confidence
   intervals. Use for exploratory analysis only, not clinical reference.
 - Only 5 sample IDs per population are included in the manifest by default.
   Full lists are available at the [1000G data portal](https://www.internationalgenome.org/data-portal/population).
 - This pipeline is for research purposes only. Do not use for clinical decisions.
+
+## Results
+
+The run called **434 of 452 sliced samples** (Aldy v4.8.3, GRCh37/hg19). The
+18 exclusions are samples whose average coverage over the locus fell below
+Aldy's threshold, which is expected for low-coverage (~4x) WGS.
+
+What came out of it:
+
+- **PEL** carries the clearest poor-metabolizer signal in the cohort, including
+  homozygous \*4C.
+- **PUR** shows ultrarapid duplications.
+- **MXL** has the highest share of indeterminate calls, driven by complex
+  alleles common in admixed populations that CPIC tables do not yet cover.
+
+The dashboard renders all of this: see the live demo linked at the top.
+
+## Data & licenses
+
+- **1000 Genomes Project Phase 3**: open access with no reuse restrictions.
+  Cite as "1000 Genomes Project Phase 3". The BAM slices are derived from the
+  public low-coverage WGS alignments.
+- **CPIC**: open-access guidelines, used for the diplotype to phenotype mapping
+  and the drug recommendations.
+- Code: MIT, see [LICENSE](LICENSE).
+
+The sample identifiers (NA/HG prefixes) are the public 1000 Genomes identifiers.
+No personally identifiable information is ingested, stored or emitted.

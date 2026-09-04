@@ -10,7 +10,7 @@ Produces `SampleEntry` objects with `sample_id`, `population`, `bam_url`, and `b
 
 ### `slice_bams.py`
 Remote BAM slicing script. For each sample it:
-1. Calls `samtools view -b` over HTTPS to extract only `chr22:42,000,000–42,200,000`
+1. Calls `samtools view -b` over HTTPS to extract only `22:42,400,000-42,650,000` (GRCh37/hg19)
 2. Indexes the resulting BAM with `samtools index`
 3. Parallelizes across samples using `concurrent.futures.ThreadPoolExecutor`
 
@@ -33,4 +33,4 @@ or a small cloud instance. Instead, samtools can stream just the bytes covering
 the desired genomic region by fetching only the relevant blocks from the remote BGZF
 file, guided by the `.bai` index. Per-sample data transfer drops from ~15 GB to ~50 MB.
 
-Total for 347 samples: **~17 GB** vs 5 TB.
+Total for 452 samples: **~23 GB** vs 5 TB.
